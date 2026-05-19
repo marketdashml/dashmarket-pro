@@ -2,24 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  BarChart3,
-  Boxes,
-  Cable,
-  CircleDollarSign,
-  ClipboardList,
-  LineChart,
-  LogOut,
-  Megaphone,
-  PackageCheck,
-  PackagePlus,
-  Percent,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Tags,
-  WalletCards
-} from "lucide-react";
+import { LogOut, PackagePlus, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import {
   calculateContributionMargins,
   type AdvertisingSpend,
@@ -31,21 +14,12 @@ import { getMarketplaceAdapter, listMarketplaceAdapters } from "@/lib/marketplac
 import type { MarketplaceProvider } from "@/lib/marketplaces/types";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 type ViewKey = "margem" | "custos" | "estoque" | "ads";
 type SupabaseStatus = "checking" | "demo" | "connected" | "error";
 
-type Organization = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-type ProductRow = {
-  id: string;
-  internal_sku: string;
-  title: string;
-};
-
+type Organization = { id: string; name: string; slug: string };
+type ProductRow = { id: string; internal_sku: string; title: string };
 type CostCenterRow = {
   id: string;
   cost_name: string;
@@ -57,6 +31,7 @@ type CostCenterRow = {
   products: ProductRow | ProductRow[] | null;
 };
 
+// ─── Seed data ───────────────────────────────────────────────────────────────
 const salesSeed: SaleRecord[] = [
   {
     sku: "MLB-CABO-USB-C-1M",
@@ -105,136 +80,33 @@ const salesSeed: SaleRecord[] = [
 ];
 
 const costsSeed: SkuCost[] = [
-  {
-    id: "cost-1",
-    sku: "MLB-CABO-USB-C-1M",
-    label: "Fornecedor",
-    category: "product",
-    amount: 18.9,
-    allocation: "per_unit",
-    validFrom: "2026-05-01"
-  },
-  {
-    id: "cost-2",
-    sku: "MLB-CABO-USB-C-1M",
-    label: "Embalagem",
-    category: "packaging",
-    amount: 1.25,
-    allocation: "per_unit",
-    validFrom: "2026-05-01"
-  },
-  {
-    id: "cost-3",
-    sku: "MLB-CAPA-AIR-13",
-    label: "Fornecedor",
-    category: "product",
-    amount: 72.4,
-    allocation: "per_unit",
-    validFrom: "2026-05-01"
-  },
-  {
-    id: "cost-4",
-    sku: "MLB-SUPORTE-MESA-PRO",
-    label: "Fornecedor",
-    category: "product",
-    amount: 184,
-    allocation: "per_unit",
-    validFrom: "2026-05-01"
-  },
-  {
-    id: "cost-5",
-    sku: "MLB-FONE-BT-COMPACT",
-    label: "Fornecedor",
-    category: "product",
-    amount: 48.7,
-    allocation: "per_unit",
-    validFrom: "2026-05-01"
-  }
+  { id: "cost-1", sku: "MLB-CABO-USB-C-1M", label: "Fornecedor", category: "product", amount: 18.9, allocation: "per_unit", validFrom: "2026-05-01" },
+  { id: "cost-2", sku: "MLB-CABO-USB-C-1M", label: "Embalagem", category: "packaging", amount: 1.25, allocation: "per_unit", validFrom: "2026-05-01" },
+  { id: "cost-3", sku: "MLB-CAPA-AIR-13", label: "Fornecedor", category: "product", amount: 72.4, allocation: "per_unit", validFrom: "2026-05-01" },
+  { id: "cost-4", sku: "MLB-SUPORTE-MESA-PRO", label: "Fornecedor", category: "product", amount: 184, allocation: "per_unit", validFrom: "2026-05-01" },
+  { id: "cost-5", sku: "MLB-FONE-BT-COMPACT", label: "Fornecedor", category: "product", amount: 48.7, allocation: "per_unit", validFrom: "2026-05-01" }
 ];
 
 const adSpendSeed: AdvertisingSpend[] = [
-  {
-    sku: "MLB-CABO-USB-C-1M",
-    amount: 870,
-    clicks: 2480,
-    impressions: 81400,
-    attributedRevenue: 4480
-  },
-  {
-    sku: "MLB-CAPA-AIR-13",
-    amount: 420,
-    clicks: 1114,
-    impressions: 35600,
-    attributedRevenue: 2910
-  },
-  {
-    sku: "MLB-SUPORTE-MESA-PRO",
-    amount: 980,
-    clicks: 1560,
-    impressions: 42200,
-    attributedRevenue: 6200
-  },
-  {
-    sku: "MLB-FONE-BT-COMPACT",
-    amount: 740,
-    clicks: 2030,
-    impressions: 61500,
-    attributedRevenue: 3890
-  }
+  { sku: "MLB-CABO-USB-C-1M", amount: 870, clicks: 2480, impressions: 81400, attributedRevenue: 4480 },
+  { sku: "MLB-CAPA-AIR-13", amount: 420, clicks: 1114, impressions: 35600, attributedRevenue: 2910 },
+  { sku: "MLB-SUPORTE-MESA-PRO", amount: 980, clicks: 1560, impressions: 42200, attributedRevenue: 6200 },
+  { sku: "MLB-FONE-BT-COMPACT", amount: 740, clicks: 2030, impressions: 61500, attributedRevenue: 3890 }
 ];
 
 const inventoryRows = [
-  {
-    sku: "MLB-CABO-USB-C-1M",
-    channel: "Full",
-    available: 420,
-    reserved: 36,
-    transfer: 280,
-    status: "Saudavel"
-  },
-  {
-    sku: "MLB-CAPA-AIR-13",
-    channel: "Full",
-    available: 96,
-    reserved: 12,
-    transfer: 40,
-    status: "Atencao"
-  },
-  {
-    sku: "MLB-SUPORTE-MESA-PRO",
-    channel: "Full",
-    available: 31,
-    reserved: 8,
-    transfer: 20,
-    status: "Critico"
-  },
-  {
-    sku: "MLB-FONE-BT-COMPACT",
-    channel: "Flex",
-    available: 188,
-    reserved: 19,
-    transfer: 0,
-    status: "Saudavel"
-  }
+  { sku: "MLB-CABO-USB-C-1M", channel: "Full", available: 420, reserved: 36, transfer: 280, status: "Saudavel" },
+  { sku: "MLB-CAPA-AIR-13", channel: "Full", available: 96, reserved: 12, transfer: 40, status: "Atencao" },
+  { sku: "MLB-SUPORTE-MESA-PRO", channel: "Full", available: 31, reserved: 8, transfer: 20, status: "Critico" },
+  { sku: "MLB-FONE-BT-COMPACT", channel: "Flex", available: 188, reserved: 19, transfer: 0, status: "Saudavel" }
 ];
 
 const promotionRows = [
-  {
-    sku: "MLB-CABO-USB-C-1M",
-    name: "Oferta relampago",
-    discount: "8%",
-    period: "12 a 14 mai",
-    impact: "Boa margem"
-  },
-  {
-    sku: "MLB-SUPORTE-MESA-PRO",
-    name: "Campanha marketplace",
-    discount: "R$ 24,00",
-    period: "10 a 18 mai",
-    impact: "Revisar custo"
-  }
+  { sku: "MLB-CABO-USB-C-1M", name: "Oferta relampago", discount: "8%", period: "12 a 14 mai", impact: "Boa margem" },
+  { sku: "MLB-SUPORTE-MESA-PRO", name: "Campanha marketplace", discount: "R$ 24,00", period: "10 a 18 mai", impact: "Revisar custo" }
 ];
 
+// ─── Labels ───────────────────────────────────────────────────────────────────
 const costCategoryLabel: Record<SkuCost["category"], string> = {
   product: "Produto",
   packaging: "Embalagem",
@@ -250,104 +122,35 @@ const allocationLabel: Record<SkuCost["allocation"], string> = {
   per_order: "Por pedido"
 };
 
-const views: Array<{ key: ViewKey; label: string; icon: typeof BarChart3 }> = [
-  { key: "margem", label: "Margem", icon: BarChart3 },
-  { key: "custos", label: "Centro de custos", icon: WalletCards },
-  { key: "estoque", label: "Estoque Full", icon: Boxes },
-  { key: "ads", label: "Publicidade", icon: Megaphone }
+const views: Array<{ key: ViewKey; label: string; code: string }> = [
+  { key: "margem", label: "Margem contrib.", code: "MCB" },
+  { key: "custos", label: "Centro de custos", code: "CCT" },
+  { key: "estoque", label: "Estoque Full", code: "EST" },
+  { key: "ads", label: "Publicidade", code: "ADS" }
 ];
 
-const formatCurrency = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL"
-});
-
+// ─── Formatters ───────────────────────────────────────────────────────────────
+const formatCurrency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const formatNumber = new Intl.NumberFormat("pt-BR");
 
 function formatPercent(value: number) {
-  return `${(value * 100).toLocaleString("pt-BR", {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 1
-  })}%`;
+  return `${(value * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
-function statusClass(status: string) {
-  if (status === "Critico") return "bg-rose-50 text-berry ring-rose-200";
-  if (status === "Atencao") return "bg-amber-50 text-clay ring-amber-200";
-  return "bg-emerald-50 text-sea ring-emerald-200";
-}
-
-function KpiCard({
-  title,
-  value,
-  detail,
-  icon: Icon,
-  tone = "sea"
-}: {
-  title: string;
-  value: string;
-  detail: string;
-  icon: typeof BarChart3;
-  tone?: "sea" | "moss" | "clay" | "berry";
-}) {
-  const toneClass = {
-    sea: "bg-teal-50 text-sea ring-teal-100",
-    moss: "bg-lime-50 text-moss ring-lime-100",
-    clay: "bg-amber-50 text-clay ring-amber-100",
-    berry: "bg-rose-50 text-berry ring-rose-100"
-  }[tone];
-
-  return (
-    <section className="rounded-lg border border-black/10 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-black/50">
-            {title}
-          </p>
-          <p className="mt-2 text-2xl font-semibold tracking-normal text-ink">{value}</p>
-        </div>
-        <span className={`grid h-10 w-10 place-items-center rounded-lg ring-1 ${toneClass}`}>
-          <Icon aria-hidden className="h-5 w-5" />
-        </span>
-      </div>
-      <p className="mt-3 text-sm text-black/60">{detail}</p>
-    </section>
-  );
-}
-
-function ModuleButton({
-  view,
-  activeView,
-  onClick
-}: {
-  view: (typeof views)[number];
-  activeView: ViewKey;
-  onClick: (view: ViewKey) => void;
-}) {
-  const Icon = view.icon;
-
-  return (
-    <button
-      className={`flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold ring-1 transition ${
-        activeView === view.key
-          ? "bg-ink text-white ring-ink"
-          : "bg-white text-ink ring-black/10 hover:bg-black/[0.03]"
-      }`}
-      onClick={() => onClick(view.key)}
-      type="button"
-    >
-      <Icon aria-hidden className="h-4 w-4" />
-      <span>{view.label}</span>
-    </button>
-  );
-}
-
+// ─── Tone helpers ─────────────────────────────────────────────────────────────
 function marginTone(row: ContributionMarginRow) {
-  if (row.contributionMarginRate < 0.12) return "text-berry";
-  if (row.contributionMarginRate < 0.22) return "text-clay";
-  return "text-sea";
+  if (row.contributionMarginRate < 0.12) return "text-hazard";
+  if (row.contributionMarginRate < 0.22) return "text-amber-400";
+  return "text-signal";
 }
 
+function stockColor(status: string) {
+  if (status === "Critico") return "text-hazard";
+  if (status === "Atencao") return "text-amber-400";
+  return "text-signal";
+}
+
+// ─── Cost row helpers ─────────────────────────────────────────────────────────
 function getRelatedProduct(row: CostCenterRow) {
   if (Array.isArray(row.products)) return row.products[0] ?? null;
   return row.products;
@@ -356,7 +159,6 @@ function getRelatedProduct(row: CostCenterRow) {
 function mapCostCenterRow(row: CostCenterRow): SkuCost | null {
   const product = getRelatedProduct(row);
   if (!product) return null;
-
   return {
     id: row.id,
     sku: product.internal_sku,
@@ -369,23 +171,81 @@ function mapCostCenterRow(row: CostCenterRow): SkuCost | null {
   };
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function TelemetryCell({
+  label,
+  value,
+  delta,
+  alert = false
+}: {
+  label: string;
+  value: string;
+  delta: string;
+  alert?: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-col justify-between p-5 ${
+        alert ? "bg-hazard/[0.08]" : "bg-crt"
+      }`}
+    >
+      <span
+        className={`text-[10px] uppercase tracking-[0.22em] ${
+          alert ? "text-hazard" : "text-faint"
+        }`}
+      >
+        {label}
+      </span>
+      <div>
+        <div
+          className={`font-display text-[28px] leading-none tracking-tight ${
+            alert ? "text-hazard" : "text-phos"
+          }`}
+        >
+          {value}
+        </div>
+        <div
+          className={`text-[11px] mt-1.5 tracking-wide ${
+            alert ? "text-hazard" : "text-muted"
+          }`}
+        >
+          {delta}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function THead({ cols }: { cols: string[] }) {
+  return (
+    <thead>
+      <tr className="bg-phos text-crt">
+        {cols.map((col) => (
+          <th
+            key={col}
+            className="px-4 py-2.5 text-left text-[10.5px] uppercase tracking-[0.16em] font-semibold whitespace-nowrap"
+          >
+            {col}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export function DashmarketDashboard() {
   const [supabaseClient] = useState(() => {
-    try {
-      return createBrowserSupabaseClient();
-    } catch {
-      return null;
-    }
+    try { return createBrowserSupabaseClient(); } catch { return null; }
   });
-  const [selectedProvider, setSelectedProvider] =
-    useState<MarketplaceProvider>("mercadolivre");
+
+  const [selectedProvider, setSelectedProvider] = useState<MarketplaceProvider>("mercadolivre");
   const [activeView, setActiveView] = useState<ViewKey>("margem");
   const [skuFilter, setSkuFilter] = useState("");
   const [costs, setCosts] = useState<SkuCost[]>(costsSeed);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [supabaseStatus, setSupabaseStatus] =
-    useState<SupabaseStatus>("checking");
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>("checking");
   const [realProducts, setRealProducts] = useState<ProductRow[]>([]);
   const [dataMessage, setDataMessage] = useState<string | null>(null);
   const [isSavingCost, setIsSavingCost] = useState(false);
@@ -398,30 +258,24 @@ export function DashmarketDashboard() {
     validFrom: "2026-05-01"
   });
 
+  const selectedAdapter = getMarketplaceAdapter(selectedProvider);
+
   const productOptions = useMemo(
     () =>
       realProducts.length > 0
-        ? realProducts.map((product) => ({
-            sku: product.internal_sku,
-            title: product.title
-          }))
-        : salesSeed.map((sale) => ({ sku: sale.sku, title: sale.title })),
+        ? realProducts.map((p) => ({ sku: p.internal_sku, title: p.title }))
+        : salesSeed.map((s) => ({ sku: s.sku, title: s.title })),
     [realProducts]
   );
 
-  const selectedAdapter = getMarketplaceAdapter(selectedProvider);
   const marginRows = useMemo(
     () => calculateContributionMargins(salesSeed, costs, adSpendSeed),
     [costs]
   );
 
   const filteredMargins = marginRows.filter((row) => {
-    const query = skuFilter.trim().toLowerCase();
-    return (
-      !query ||
-      row.sku.toLowerCase().includes(query) ||
-      row.title.toLowerCase().includes(query)
-    );
+    const q = skuFilter.trim().toLowerCase();
+    return !q || row.sku.toLowerCase().includes(q) || row.title.toLowerCase().includes(q);
   });
 
   const totals = marginRows.reduce(
@@ -437,20 +291,12 @@ export function DashmarketDashboard() {
       units: acc.units + row.units
     }),
     {
-      grossRevenue: 0,
-      netRevenue: 0,
-      marketplaceFees: 0,
-      shippingCosts: 0,
-      discounts: 0,
-      skuCosts: 0,
-      advertisingCosts: 0,
-      contributionMargin: 0,
-      units: 0
+      grossRevenue: 0, netRevenue: 0, marketplaceFees: 0, shippingCosts: 0,
+      discounts: 0, skuCosts: 0, advertisingCosts: 0, contributionMargin: 0, units: 0
     }
   );
 
-  const marginRate =
-    totals.netRevenue > 0 ? totals.contributionMargin / totals.netRevenue : 0;
+  const marginRate = totals.netRevenue > 0 ? totals.contributionMargin / totals.netRevenue : 0;
 
   const loadCostCenter = useCallback(async (organizationId: string) => {
     if (!supabaseClient) return;
@@ -462,25 +308,20 @@ export function DashmarketDashboard() {
       .order("internal_sku", { ascending: true });
 
     if (productsError) throw productsError;
-
-    const products = (productsData ?? []) as ProductRow[];
-    setRealProducts(products);
+    setRealProducts((productsData ?? []) as ProductRow[]);
 
     const { data: costsData, error: costsError } = await supabaseClient
       .from("sku_costs")
-      .select(
-        "id, cost_name, cost_category, allocation_method, amount, valid_from, valid_to, products(id, internal_sku, title)"
-      )
+      .select("id, cost_name, cost_category, allocation_method, amount, valid_from, valid_to, products(id, internal_sku, title)")
       .eq("organization_id", organizationId)
       .order("valid_from", { ascending: false });
 
     if (costsError) throw costsError;
-
-    const mappedCosts = ((costsData ?? []) as CostCenterRow[])
-      .map(mapCostCenterRow)
-      .filter((cost): cost is SkuCost => Boolean(cost));
-
-    setCosts(mappedCosts);
+    setCosts(
+      ((costsData ?? []) as CostCenterRow[])
+        .map(mapCostCenterRow)
+        .filter((c): c is SkuCost => Boolean(c))
+    );
   }, [supabaseClient]);
 
   useEffect(() => {
@@ -492,11 +333,8 @@ export function DashmarketDashboard() {
         setCosts(costsSeed);
         return;
       }
-
       try {
-        const { data: sessionData, error: sessionError } =
-          await supabaseClient.auth.getSession();
-
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
         if (sessionError) throw sessionError;
 
         const session = sessionData.session;
@@ -510,76 +348,56 @@ export function DashmarketDashboard() {
           return;
         }
 
-        const { data: organizationsData, error: organizationsError } =
-          await supabaseClient
-            .from("organizations")
-            .select("id, name, slug")
-            .order("created_at", { ascending: true })
-            .limit(1);
+        const { data: orgsData, error: orgsError } = await supabaseClient
+          .from("organizations")
+          .select("id, name, slug")
+          .order("created_at", { ascending: true })
+          .limit(1);
 
-        if (organizationsError) throw organizationsError;
+        if (orgsError) throw orgsError;
 
-        const currentOrganization =
-          ((organizationsData ?? [])[0] as Organization | undefined) ?? null;
-
+        const org = ((orgsData ?? [])[0] as Organization | undefined) ?? null;
         if (!isMounted) return;
 
         setUserEmail(session.user.email ?? null);
-        setOrganization(currentOrganization);
+        setOrganization(org);
         setSupabaseStatus("connected");
 
-        if (currentOrganization) {
-          await loadCostCenter(currentOrganization.id);
+        if (org) {
+          await loadCostCenter(org.id);
         } else {
           setCosts([]);
-          setDataMessage("Usuario autenticado, mas sem empresa vinculada.");
+          setDataMessage("Autenticado, mas sem empresa vinculada.");
         }
       } catch (error) {
         if (!isMounted) return;
         setSupabaseStatus("error");
         setCosts(costsSeed);
-        setDataMessage(
-          error instanceof Error
-            ? error.message
-            : "Nao foi possivel carregar os dados do Supabase."
-        );
+        setDataMessage(error instanceof Error ? error.message : "Nao foi possivel conectar ao Supabase.");
       }
     }
 
     loadWorkspace();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [loadCostCenter, supabaseClient]);
 
   async function addCost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     if (!costForm.label.trim() || !costForm.amount) return;
 
     if (supabaseClient && organization) {
       setIsSavingCost(true);
       setDataMessage(null);
-
       try {
-        let product = realProducts.find(
-          (currentProduct) => currentProduct.internal_sku === costForm.sku
-        );
+        let product = realProducts.find((p) => p.internal_sku === costForm.sku);
 
         if (!product) {
-          const seedProduct = salesSeed.find((sale) => sale.sku === costForm.sku);
-          const { data: insertedProduct, error: productError } =
-            await supabaseClient
-              .from("products")
-              .insert({
-                organization_id: organization.id,
-                internal_sku: costForm.sku,
-                title: seedProduct?.title ?? costForm.sku
-              })
-              .select("id, internal_sku, title")
-              .single();
-
+          const seedProduct = salesSeed.find((s) => s.sku === costForm.sku);
+          const { data: insertedProduct, error: productError } = await supabaseClient
+            .from("products")
+            .insert({ organization_id: organization.id, internal_sku: costForm.sku, title: seedProduct?.title ?? costForm.sku })
+            .select("id, internal_sku, title")
+            .single();
           if (productError) throw productError;
           product = insertedProduct as ProductRow;
         }
@@ -595,30 +413,21 @@ export function DashmarketDashboard() {
         });
 
         if (costError) throw costError;
-
         await loadCostCenter(organization.id);
-        setCostForm((current) => ({ ...current, label: "", amount: "" }));
+        setCostForm((c) => ({ ...c, label: "", amount: "" }));
         setDataMessage("Custo salvo no Supabase.");
       } catch (error) {
-        setDataMessage(
-          error instanceof Error
-            ? error.message
-            : "Nao foi possivel salvar o custo."
-        );
+        setDataMessage(error instanceof Error ? error.message : "Nao foi possivel salvar.");
       } finally {
         setIsSavingCost(false);
       }
-
       return;
     }
 
     setCosts((current) => [
       ...current,
       {
-        id:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `cost-${Date.now()}`,
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `cost-${Date.now()}`,
         sku: costForm.sku,
         label: costForm.label.trim(),
         category: costForm.category,
@@ -627,8 +436,7 @@ export function DashmarketDashboard() {
         validFrom: costForm.validFrom
       }
     ]);
-
-    setCostForm((current) => ({ ...current, label: "", amount: "" }));
+    setCostForm((c) => ({ ...c, label: "", amount: "" }));
   }
 
   async function signOut() {
@@ -642,255 +450,228 @@ export function DashmarketDashboard() {
     setDataMessage("Sessao encerrada.");
   }
 
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+
   return (
-    <main className="min-h-screen bg-paper text-ink">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="border-b border-black/10 bg-ink px-4 py-4 text-white lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between gap-4 lg:block">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-white text-sm font-black text-ink">
-                  DM
-                </span>
-                <div>
-                  <p className="text-lg font-black tracking-normal">DASHMARKET</p>
-                  <p className="text-xs text-white/60">Marketplace intelligence</p>
-                </div>
-              </div>
-            </div>
+    <main className="min-h-screen bg-crt text-phos font-mono flex">
+      {/* ── SIDEBAR ── */}
+      <aside className="w-56 flex-none border-r border-rule bg-crt-2 flex flex-col min-h-screen">
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-rule">
+          <div className="font-display text-[26px] leading-none uppercase tracking-tight">
+            DM<span className="text-hazard animate-blink">▌</span>
+          </div>
+          <div className="text-[9px] uppercase tracking-[0.22em] text-faint mt-2">
+            Dashmarket-Pro
+          </div>
+          <div className="text-[9px] text-faint mt-0.5">
+            v2026.05 // {selectedAdapter.displayName}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-3 flex flex-col">
+          {views.map((view) => (
+            <button
+              key={view.key}
+              type="button"
+              onClick={() => setActiveView(view.key)}
+              className={`w-full text-left px-5 py-2.5 text-[11px] uppercase tracking-[0.18em] flex items-center gap-3 border-l-2 transition-colors ${
+                activeView === view.key
+                  ? "border-hazard text-phos bg-rule/40"
+                  : "border-transparent text-faint hover:text-muted hover:bg-rule/20"
+              }`}
+            >
+              <span className="font-display text-[10px] text-hazard w-8 flex-none">{view.code}</span>
+              {view.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Marketplace selector */}
+        <div className="px-5 py-4 border-t border-rule">
+          <div className="text-[9px] uppercase tracking-[0.22em] text-hazard mb-2">Conector</div>
+          {listMarketplaceAdapters().slice(0, 3).map((adapter) => (
+            <button
+              key={adapter.provider}
+              type="button"
+              onClick={() => setSelectedProvider(adapter.provider)}
+              className={`w-full text-left text-[11px] py-1 transition-colors ${
+                selectedProvider === adapter.provider
+                  ? "text-phos"
+                  : "text-faint hover:text-muted"
+              }`}
+            >
+              {selectedProvider === adapter.provider ? "▶ " : "  "}
+              {adapter.displayName}
+            </button>
+          ))}
+        </div>
+
+        {/* Status + Auth */}
+        <div className="px-5 py-4 border-t border-rule">
+          <div className="text-[9px] uppercase tracking-[0.22em] text-hazard mb-2">Status</div>
+          <div className="flex items-center gap-2 text-[11px]">
+            {supabaseStatus === "connected" && (
+              <span
+                className="w-2 h-2 bg-signal inline-block flex-none animate-live"
+                style={{ boxShadow: "0 0 8px rgba(74,246,38,0.55)" }}
+              />
+            )}
+            <span className={supabaseStatus === "connected" ? "text-signal" : "text-muted"}>
+              {supabaseStatus === "connected"
+                ? (organization?.name ?? "Conectado")
+                : supabaseStatus === "checking"
+                ? "Verificando..."
+                : "Modo demo"}
+            </span>
+          </div>
+          {userEmail && (
+            <div className="mt-1 text-[10px] text-faint truncate">{userEmail}</div>
+          )}
+
+          <div className="mt-3">
             {supabaseStatus === "connected" ? (
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-white/10 px-3 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 lg:mt-6"
-                onClick={signOut}
                 type="button"
+                onClick={signOut}
+                className="w-full h-8 flex items-center justify-center gap-2 border border-rule text-[10px] uppercase tracking-[0.18em] text-muted hover:border-hazard hover:text-hazard transition-colors"
               >
-                <LogOut aria-hidden className="h-4 w-4" />
+                <LogOut className="h-3 w-3" />
                 Sair
               </button>
             ) : (
               <Link
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-white/10 px-3 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/20 lg:mt-6"
                 href="/login"
+                className="w-full h-8 flex items-center justify-center gap-2 border border-rule text-[10px] uppercase tracking-[0.18em] text-muted hover:border-signal hover:text-signal transition-colors"
               >
-                <ShieldCheck aria-hidden className="h-4 w-4" />
+                <ShieldCheck className="h-3 w-3" />
                 Entrar
               </Link>
             )}
           </div>
+        </div>
+      </aside>
 
-          <nav className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-1">
-            {views.map((view) => {
-              const Icon = view.icon;
-              return (
-                <button
-                  className={`flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold transition ${
-                    activeView === view.key
-                      ? "bg-white text-ink"
-                      : "bg-white/10 text-white/70 hover:bg-white/20"
-                  }`}
-                  key={view.key}
-                  onClick={() => setActiveView(view.key)}
-                  type="button"
-                >
-                  <Icon aria-hidden className="h-4 w-4" />
-                  {view.label}
-                </button>
-              );
-            })}
-          </nav>
+      {/* ── MAIN ── */}
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        {/* Topbar */}
+        <header className="h-10 border-b border-rule bg-crt-2 flex items-center px-6 gap-5 text-[10.5px] uppercase tracking-[0.16em] text-muted flex-shrink-0">
+          <span className="text-phos font-semibold">
+            DM-PRO <span className="text-faint">·</span> Visao operacional
+          </span>
+          <span className="text-faint">{today}</span>
+          <span className={supabaseStatus === "connected" ? "text-signal" : "text-faint"}>
+            ⬤ {supabaseStatus === "connected" ? "Live" : "Demo"}
+          </span>
+          <span className="ml-auto flex items-center gap-4">
+            {dataMessage && (
+              <span className="text-hazard text-[10px] truncate max-w-xs">{dataMessage}</span>
+            )}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-muted hover:text-signal transition-colors"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Sincronizar
+            </button>
+          </span>
+        </header>
 
-          <section className="mt-6 rounded-lg border border-white/10 bg-white/10 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Cable aria-hidden className="h-4 w-4 text-teal-200" />
-              Conector ativo
-            </div>
-            <p className="mt-3 text-2xl font-semibold">{selectedAdapter.displayName}</p>
-            <p className="mt-1 text-sm text-white/60">
-              Estrutura pronta para multiplos marketplaces.
-            </p>
-            <div className="mt-4 rounded-lg bg-black/15 p-3 text-xs text-white/72">
-              <p className="font-bold text-white">
-                {organization?.name ?? "Modo demonstrativo"}
-              </p>
-              <p className="mt-1">
-                {userEmail ??
-                  (supabaseStatus === "checking"
-                    ? "Verificando sessao"
-                    : "Entre para gravar custos reais")}
-              </p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selectedAdapter.capabilities.map((capability) => (
-                <span
-                  className="rounded-lg bg-white/10 px-2 py-1 text-xs font-semibold text-white/80"
-                  key={capability}
-                >
-                  {capability}
-                </span>
-              ))}
-            </div>
-          </section>
-        </aside>
+        {/* Telemetry grid */}
+        <section className="grid grid-cols-4 gap-px bg-rule border-b border-rule flex-shrink-0">
+          <TelemetryCell
+            label="Receita liquida"
+            value={formatCurrency.format(totals.netRevenue)}
+            delta={`${formatNumber.format(totals.units)} unidades no periodo`}
+          />
+          <TelemetryCell
+            label="Margem contribuicao"
+            value={formatCurrency.format(totals.contributionMargin)}
+            delta={`${formatPercent(marginRate)} da receita liquida`}
+            alert={marginRate < 0.12}
+          />
+          <TelemetryCell
+            label="Custos cadastrados"
+            value={formatCurrency.format(totals.skuCosts)}
+            delta="Produto, embalagem e frete"
+          />
+          <TelemetryCell
+            label="Publicidade"
+            value={formatCurrency.format(totals.advertisingCosts)}
+            delta="Investimento atribuido aos SKUs"
+          />
+        </section>
 
-        <section className="flex-1 px-4 py-5 sm:px-6 lg:px-8">
-          <header className="flex flex-col gap-4 border-b border-black/10 pb-5 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-normal text-black/50">
-                Visao operacional
-              </p>
-              <h1 className="mt-1 text-3xl font-black tracking-normal text-ink sm:text-4xl">
-                Margem, estoque e crescimento por SKU
-              </h1>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex rounded-lg bg-white p-1 ring-1 ring-black/10">
-                {listMarketplaceAdapters().slice(0, 3).map((adapter) => (
-                  <button
-                    className={`h-9 rounded-md px-3 text-sm font-semibold ${
-                      selectedProvider === adapter.provider
-                        ? "bg-ink text-white"
-                        : "text-black/60 hover:bg-black/[0.04]"
-                    }`}
-                    key={adapter.provider}
-                    onClick={() => setSelectedProvider(adapter.provider)}
-                    type="button"
-                  >
-                    {adapter.displayName}
-                  </button>
-                ))}
-              </div>
+        {/* View tabs + search */}
+        <section className="border-b border-rule bg-crt-2 px-6 py-3 flex items-center justify-between gap-4 flex-shrink-0">
+          <div className="flex items-center border border-rule">
+            {views.map((view) => (
               <button
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-sea px-4 text-sm font-bold text-white shadow-sm hover:bg-teal-800"
+                key={view.key}
                 type="button"
+                onClick={() => setActiveView(view.key)}
+                className={`h-8 px-4 text-[10.5px] uppercase tracking-[0.16em] transition-colors border-r border-rule last:border-r-0 ${
+                  activeView === view.key
+                    ? "bg-phos text-crt font-semibold"
+                    : "text-faint hover:text-muted"
+                }`}
               >
-                <RefreshCw aria-hidden className="h-4 w-4" />
-                Sincronizar
+                {view.label}
               </button>
-            </div>
-          </header>
+            ))}
+          </div>
 
-          <section className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <KpiCard
-              detail={`${formatNumber.format(totals.units)} unidades vendidas no periodo`}
-              icon={CircleDollarSign}
-              title="Receita liquida"
-              value={formatCurrency.format(totals.netRevenue)}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-faint pointer-events-none" />
+            <input
+              className="h-8 w-60 bg-crt border border-rule pl-8 pr-3 text-[11px] uppercase tracking-wide text-phos placeholder:text-faint outline-none focus:border-hazard transition-colors"
+              placeholder="Buscar SKU ou produto"
+              value={skuFilter}
+              onChange={(e) => setSkuFilter(e.target.value)}
             />
-            <KpiCard
-              detail={`${formatPercent(marginRate)} sobre a receita liquida`}
-              icon={Percent}
-              title="Margem contribuicao"
-              tone={marginRate < 0.18 ? "clay" : "moss"}
-              value={formatCurrency.format(totals.contributionMargin)}
-            />
-            <KpiCard
-              detail="Inclui produto, embalagem e custos por SKU"
-              icon={WalletCards}
-              title="Custos cadastrados"
-              tone="clay"
-              value={formatCurrency.format(totals.skuCosts)}
-            />
-            <KpiCard
-              detail="Investimento atribuido aos SKUs vendidos"
-              icon={Megaphone}
-              title="Publicidade"
-              tone="berry"
-              value={formatCurrency.format(totals.advertisingCosts)}
-            />
-          </section>
+          </div>
+        </section>
 
-          <section className="mt-5 rounded-lg border border-black/10 bg-white p-3 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {views.map((view) => (
-                  <ModuleButton
-                    activeView={activeView}
-                    key={view.key}
-                    onClick={setActiveView}
-                    view={view}
-                  />
-                ))}
-              </div>
-              <label className="relative block min-w-0 sm:w-80">
-                <Search
-                  aria-hidden
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40"
-                />
-                <input
-                  className="h-10 w-full rounded-lg border border-black/10 bg-paper pl-9 pr-3 text-sm outline-none ring-sea/25 placeholder:text-black/40 focus:ring-4"
-                  onChange={(event) => setSkuFilter(event.target.value)}
-                  placeholder="Buscar SKU ou produto"
-                  value={skuFilter}
-                />
-              </label>
-            </div>
-          </section>
+        {/* Content area */}
+        <div className="flex-1 overflow-auto p-6">
 
-          {(dataMessage || supabaseStatus === "connected") && (
-            <section className="mt-4 rounded-lg border border-black/10 bg-white px-4 py-3 text-sm shadow-sm">
-              <p className="font-semibold text-ink">
-                {supabaseStatus === "connected"
-                  ? `Supabase conectado${organization ? `: ${organization.name}` : ""}`
-                  : "Modo demonstrativo"}
-              </p>
-              <p className="mt-1 text-black/60">
-                {dataMessage ??
-                  "Custos cadastrados nesta tela ja sao salvos no banco. Vendas, estoque e publicidade seguem demonstrativos ate conectarmos o Mercado Livre."}
-              </p>
-            </section>
-          )}
-
+          {/* ── MARGEM VIEW ── */}
           {activeView === "margem" && (
-            <section className="mt-5 rounded-lg border border-black/10 bg-white shadow-sm">
-              <div className="flex flex-col gap-2 border-b border-black/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="border border-rule">
+              <div className="bg-crt-2 px-4 py-3 border-b border-rule flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-bold">Conciliação da margem por SKU</h2>
-                  <p className="text-sm text-black/60">
-                    Receita, taxas, frete, custos internos e publicidade no mesmo lugar.
-                  </p>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">
+                    [MCB] Conciliacao de margem
+                  </div>
+                  <div className="text-[12px] text-muted mt-0.5">
+                    Receita, taxas ML, frete, custos internos e publicidade por SKU
+                  </div>
                 </div>
-                <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-semibold text-sea ring-1 ring-emerald-100">
-                  <PackageCheck aria-hidden className="h-4 w-4" />
-                  Base preparada para conciliar pedidos
+                <span className="text-[10px] uppercase tracking-[0.18em] text-signal border border-rule px-3 py-1">
+                  {filteredMargins.length} SKUs
                 </span>
               </div>
               <div className="table-scroll overflow-x-auto">
-                <table className="min-w-[980px] w-full text-left text-sm">
-                  <thead className="bg-black/[0.025] text-xs uppercase tracking-normal text-black/50">
-                    <tr>
-                      <th className="px-4 py-3">SKU</th>
-                      <th className="px-4 py-3">Receita liquida</th>
-                      <th className="px-4 py-3">Taxas</th>
-                      <th className="px-4 py-3">Frete</th>
-                      <th className="px-4 py-3">Custo SKU</th>
-                      <th className="px-4 py-3">Ads</th>
-                      <th className="px-4 py-3">Margem</th>
-                      <th className="px-4 py-3">%</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-black/10">
-                    {filteredMargins.map((row) => (
-                      <tr className="hover:bg-black/[0.018]" key={row.sku}>
+                <table className="w-full min-w-[900px] text-left text-[12.5px] letter-spacing-wide">
+                  <THead cols={["SKU / Produto", "Rec. Liquida", "Taxas ML", "Frete", "Custo SKU", "Ads", "Margem R$", "Margem %"]} />
+                  <tbody>
+                    {filteredMargins.map((row, i) => (
+                      <tr
+                        key={row.sku}
+                        className={`border-t border-rule hover:bg-rule/30 transition-colors ${
+                          i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"
+                        }`}
+                      >
                         <td className="px-4 py-3">
-                          <p className="font-bold text-ink">{row.sku}</p>
-                          <p className="text-xs text-black/50">{row.title}</p>
+                          <div className="font-semibold text-phos">{row.sku}</div>
+                          <div className="text-[11px] text-faint mt-0.5">{row.title}</div>
                         </td>
-                        <td className="px-4 py-3 font-semibold">
-                          {formatCurrency.format(row.netRevenue)}
-                        </td>
-                        <td className="px-4 py-3 text-black/60">
-                          {formatCurrency.format(row.marketplaceFees)}
-                        </td>
-                        <td className="px-4 py-3 text-black/60">
-                          {formatCurrency.format(row.shippingCosts)}
-                        </td>
-                        <td className="px-4 py-3 text-black/60">
-                          {formatCurrency.format(row.skuCosts)}
-                        </td>
-                        <td className="px-4 py-3 text-black/60">
-                          {formatCurrency.format(row.advertisingCosts)}
-                        </td>
+                        <td className="px-4 py-3 font-semibold">{formatCurrency.format(row.netRevenue)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCurrency.format(row.marketplaceFees)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCurrency.format(row.shippingCosts)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCurrency.format(row.skuCosts)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCurrency.format(row.advertisingCosts)}</td>
                         <td className={`px-4 py-3 font-bold ${marginTone(row)}`}>
                           {formatCurrency.format(row.contributionMargin)}
                         </td>
@@ -902,292 +683,224 @@ export function DashmarketDashboard() {
                   </tbody>
                 </table>
               </div>
-            </section>
+            </div>
           )}
 
+          {/* ── CUSTOS VIEW ── */}
           {activeView === "custos" && (
-            <section className="mt-5 grid gap-5 xl:grid-cols-[380px_1fr]">
+            <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+              {/* Form */}
               <form
-                className="rounded-lg border border-black/10 bg-white p-4 shadow-sm"
+                className="border border-rule bg-crt-2 p-5"
                 onSubmit={addCost}
               >
-                <div className="flex items-center gap-2">
-                  <PackagePlus aria-hidden className="h-5 w-5 text-sea" />
-                  <h2 className="text-lg font-bold">Cadastrar custo do SKU</h2>
+                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">
+                  [CCT] Cadastrar custo de SKU
                 </div>
 
-                <div className="mt-4 grid gap-3">
-                  <label className="grid gap-1 text-sm font-semibold">
+                <div className="grid gap-3">
+                  <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
                     SKU
                     <select
-                      className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                      onChange={(event) =>
-                        setCostForm((current) => ({
-                          ...current,
-                          sku: event.target.value
-                        }))
-                      }
+                      className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
                       value={costForm.sku}
+                      onChange={(e) => setCostForm((c) => ({ ...c, sku: e.target.value }))}
                     >
-                      {productOptions.map((product) => (
-                        <option key={product.sku} value={product.sku}>
-                          {product.sku}
-                        </option>
+                      {productOptions.map((p) => (
+                        <option key={p.sku} value={p.sku}>{p.sku}</option>
                       ))}
                     </select>
-                    <span className="text-xs font-normal text-black/50">
+                    <span className="text-[10px] text-faint normal-case tracking-normal">
                       {supabaseStatus === "connected"
-                        ? "Se o SKU ainda nao existir, ele sera criado no Supabase."
-                        : "Entre para salvar este cadastro no banco."}
+                        ? "SKU nao encontrado sera criado automaticamente."
+                        : "Entre para salvar no banco."}
                     </span>
                   </label>
 
-                  <label className="grid gap-1 text-sm font-semibold">
+                  <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
                     Nome do custo
                     <input
-                      className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                      onChange={(event) =>
-                        setCostForm((current) => ({
-                          ...current,
-                          label: event.target.value
-                        }))
-                      }
-                      placeholder="Fornecedor, embalagem, imposto"
+                      className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
+                      placeholder="Fornecedor, embalagem, imposto..."
                       value={costForm.label}
+                      onChange={(e) => setCostForm((c) => ({ ...c, label: e.target.value }))}
                     />
                   </label>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1 text-sm font-semibold">
+                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
                       Categoria
                       <select
-                        className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                        onChange={(event) =>
-                          setCostForm((current) => ({
-                            ...current,
-                            category: event.target.value as SkuCost["category"]
-                          }))
-                        }
+                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
                         value={costForm.category}
+                        onChange={(e) => setCostForm((c) => ({ ...c, category: e.target.value as SkuCost["category"] }))}
                       >
-                        {Object.entries(costCategoryLabel).map(([key, label]) => (
-                          <option key={key} value={key}>
-                            {label}
-                          </option>
+                        {Object.entries(costCategoryLabel).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
                         ))}
                       </select>
                     </label>
 
-                    <label className="grid gap-1 text-sm font-semibold">
-                      Alocação
+                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
+                      Alocacao
                       <select
-                        className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                        onChange={(event) =>
-                          setCostForm((current) => ({
-                            ...current,
-                            allocation: event.target.value as SkuCost["allocation"]
-                          }))
-                        }
+                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
                         value={costForm.allocation}
+                        onChange={(e) => setCostForm((c) => ({ ...c, allocation: e.target.value as SkuCost["allocation"] }))}
                       >
-                        {Object.entries(allocationLabel).map(([key, label]) => (
-                          <option key={key} value={key}>
-                            {label}
-                          </option>
+                        {Object.entries(allocationLabel).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
                         ))}
                       </select>
                     </label>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1 text-sm font-semibold">
+                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
                       Valor
                       <input
-                        className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                        min="0"
-                        onChange={(event) =>
-                          setCostForm((current) => ({
-                            ...current,
-                            amount: event.target.value
-                          }))
-                        }
-                        placeholder="0,00"
-                        step="0.01"
+                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
                         type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0,00"
                         value={costForm.amount}
+                        onChange={(e) => setCostForm((c) => ({ ...c, amount: e.target.value }))}
                       />
                     </label>
-                    <label className="grid gap-1 text-sm font-semibold">
+                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
                       Vigencia
                       <input
-                        className="h-10 rounded-lg border border-black/10 bg-paper px-3 font-normal outline-none focus:ring-4 focus:ring-sea/20"
-                        onChange={(event) =>
-                          setCostForm((current) => ({
-                            ...current,
-                            validFrom: event.target.value
-                          }))
-                        }
+                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
                         type="date"
                         value={costForm.validFrom}
+                        onChange={(e) => setCostForm((c) => ({ ...c, validFrom: e.target.value }))}
                       />
                     </label>
                   </div>
 
                   <button
-                    className="mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-bold text-white hover:bg-black"
-                    disabled={isSavingCost}
+                    className="mt-1 h-10 flex items-center justify-center gap-2 bg-phos text-crt text-[11px] uppercase tracking-[0.18em] font-semibold hover:bg-phos/90 transition-colors disabled:opacity-50"
                     type="submit"
+                    disabled={isSavingCost}
                   >
-                    <PackagePlus aria-hidden className="h-4 w-4" />
-                    {isSavingCost ? "Salvando" : "Adicionar custo"}
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    {isSavingCost ? "Salvando..." : "Adicionar custo"}
                   </button>
                 </div>
               </form>
 
-              <section className="rounded-lg border border-black/10 bg-white shadow-sm">
-                <div className="border-b border-black/10 p-4">
-                  <h2 className="text-lg font-bold">Custos ativos</h2>
-                  <p className="text-sm text-black/60">
-                    Cada lançamento entra no cálculo de margem respeitando SKU e vigência.
-                  </p>
+              {/* Cost table */}
+              <div className="border border-rule">
+                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[CCT] Custos ativos</div>
+                  <div className="text-[12px] text-muted mt-0.5">
+                    Cada lancamento entra no calculo de margem respeitando SKU e vigencia
+                  </div>
                 </div>
                 <div className="table-scroll overflow-x-auto">
-                  <table className="min-w-[780px] w-full text-left text-sm">
-                    <thead className="bg-black/[0.025] text-xs uppercase tracking-normal text-black/50">
-                      <tr>
-                        <th className="px-4 py-3">SKU</th>
-                        <th className="px-4 py-3">Custo</th>
-                        <th className="px-4 py-3">Categoria</th>
-                        <th className="px-4 py-3">Alocação</th>
-                        <th className="px-4 py-3">Valor</th>
-                        <th className="px-4 py-3">Desde</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/10">
-                      {costs.map((cost) => (
-                        <tr key={cost.id}>
-                          <td className="px-4 py-3 font-bold">{cost.sku}</td>
+                  <table className="w-full min-w-[640px] text-left text-[12.5px]">
+                    <THead cols={["SKU", "Custo", "Categoria", "Alocacao", "Valor", "Vigencia"]} />
+                    <tbody>
+                      {costs.map((cost, i) => (
+                        <tr
+                          key={cost.id}
+                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
+                        >
+                          <td className="px-4 py-3 font-semibold text-phos">{cost.sku}</td>
                           <td className="px-4 py-3">{cost.label}</td>
-                          <td className="px-4 py-3">
-                            {costCategoryLabel[cost.category]}
-                          </td>
-                          <td className="px-4 py-3">{allocationLabel[cost.allocation]}</td>
+                          <td className="px-4 py-3 text-muted">{costCategoryLabel[cost.category]}</td>
+                          <td className="px-4 py-3 text-muted">{allocationLabel[cost.allocation]}</td>
                           <td className="px-4 py-3 font-semibold">
                             {cost.allocation === "percentage"
                               ? `${cost.amount}%`
                               : formatCurrency.format(cost.amount)}
                           </td>
-                          <td className="px-4 py-3">{cost.validFrom}</td>
+                          <td className="px-4 py-3 text-muted">{cost.validFrom}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </section>
-            </section>
+              </div>
+            </div>
           )}
 
+          {/* ── ESTOQUE VIEW ── */}
           {activeView === "estoque" && (
-            <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]">
-              <section className="rounded-lg border border-black/10 bg-white shadow-sm">
-                <div className="border-b border-black/10 p-4">
-                  <h2 className="text-lg font-bold">Estoque por canal de envio</h2>
-                  <p className="text-sm text-black/60">
-                    Pronto para receber snapshots do Full e demais modalidades.
-                  </p>
+            <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+              <div className="border border-rule">
+                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[EST] Estoque por canal</div>
+                  <div className="text-[12px] text-muted mt-0.5">Full e Flex — snapshots do Mercado Livre</div>
                 </div>
                 <div className="table-scroll overflow-x-auto">
-                  <table className="min-w-[780px] w-full text-left text-sm">
-                    <thead className="bg-black/[0.025] text-xs uppercase tracking-normal text-black/50">
-                      <tr>
-                        <th className="px-4 py-3">SKU</th>
-                        <th className="px-4 py-3">Canal</th>
-                        <th className="px-4 py-3">Disponivel</th>
-                        <th className="px-4 py-3">Reservado</th>
-                        <th className="px-4 py-3">Em transferencia</th>
-                        <th className="px-4 py-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/10">
-                      {inventoryRows.map((row) => (
-                        <tr key={row.sku}>
-                          <td className="px-4 py-3 font-bold">{row.sku}</td>
-                          <td className="px-4 py-3">{row.channel}</td>
+                  <table className="w-full min-w-[680px] text-left text-[12.5px]">
+                    <THead cols={["SKU", "Canal", "Disponivel", "Reservado", "Em transferencia", "Status"]} />
+                    <tbody>
+                      {inventoryRows.map((row, i) => (
+                        <tr
+                          key={row.sku}
+                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
+                        >
+                          <td className="px-4 py-3 font-semibold text-phos">{row.sku}</td>
+                          <td className="px-4 py-3 text-muted">{row.channel}</td>
                           <td className="px-4 py-3">{formatNumber.format(row.available)}</td>
-                          <td className="px-4 py-3">{formatNumber.format(row.reserved)}</td>
-                          <td className="px-4 py-3">{formatNumber.format(row.transfer)}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ring-1 ${statusClass(row.status)}`}
-                            >
-                              {row.status}
-                            </span>
+                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.reserved)}</td>
+                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.transfer)}</td>
+                          <td className={`px-4 py-3 font-bold text-[11px] uppercase tracking-[0.1em] ${stockColor(row.status)}`}>
+                            {row.status}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </div>
 
-              <section className="rounded-lg border border-black/10 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <ClipboardList aria-hidden className="h-5 w-5 text-sea" />
-                  <h2 className="text-lg font-bold">Fila de sincronização</h2>
-                </div>
-                <div className="mt-4 grid gap-3">
+              {/* Sync queue */}
+              <div className="border border-rule bg-crt-2 p-5">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">Fila de sincronizacao</div>
+                <div className="grid gap-0 border border-rule">
                   {["orders", "inventory", "listings", "promotions"].map((item, index) => (
                     <div
-                      className="flex items-center justify-between rounded-lg border border-black/10 bg-paper px-3 py-3"
                       key={item}
+                      className="flex items-center justify-between px-4 py-3 border-b border-rule last:border-b-0"
                     >
-                      <span className="text-sm font-semibold">{item}</span>
-                      <span className="text-xs font-bold text-black/50">
+                      <span className="text-[11px] uppercase tracking-[0.1em] text-phos">{item}</span>
+                      <span className="text-[10px] text-faint">
                         {index === 0 ? "15 min" : "1 h"}
                       </span>
                     </div>
                   ))}
                 </div>
-              </section>
-            </section>
+              </div>
+            </div>
           )}
 
+          {/* ── ADS VIEW ── */}
           {activeView === "ads" && (
-            <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_380px]">
-              <section className="rounded-lg border border-black/10 bg-white shadow-sm">
-                <div className="border-b border-black/10 p-4">
-                  <h2 className="text-lg font-bold">Publicidade por SKU</h2>
-                  <p className="text-sm text-black/60">
-                    Investimento e receita atribuida entram na mesma conta de margem.
-                  </p>
+            <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+              <div className="border border-rule">
+                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[ADS] Publicidade por SKU</div>
+                  <div className="text-[12px] text-muted mt-0.5">Investimento e receita atribuida entram no calculo de margem</div>
                 </div>
                 <div className="table-scroll overflow-x-auto">
-                  <table className="min-w-[820px] w-full text-left text-sm">
-                    <thead className="bg-black/[0.025] text-xs uppercase tracking-normal text-black/50">
-                      <tr>
-                        <th className="px-4 py-3">SKU</th>
-                        <th className="px-4 py-3">Investimento</th>
-                        <th className="px-4 py-3">Cliques</th>
-                        <th className="px-4 py-3">Impressões</th>
-                        <th className="px-4 py-3">Receita atribuida</th>
-                        <th className="px-4 py-3">ACOS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/10">
-                      {adSpendSeed.map((row) => (
-                        <tr key={row.sku}>
-                          <td className="px-4 py-3 font-bold">{row.sku}</td>
-                          <td className="px-4 py-3">
-                            {formatCurrency.format(row.amount)}
-                          </td>
-                          <td className="px-4 py-3">{formatNumber.format(row.clicks)}</td>
-                          <td className="px-4 py-3">
-                            {formatNumber.format(row.impressions)}
-                          </td>
-                          <td className="px-4 py-3">
-                            {formatCurrency.format(row.attributedRevenue)}
-                          </td>
-                          <td className="px-4 py-3 font-bold">
+                  <table className="w-full min-w-[720px] text-left text-[12.5px]">
+                    <THead cols={["SKU", "Investimento", "Cliques", "Impressoes", "Rec. atribuida", "ACOS"]} />
+                    <tbody>
+                      {adSpendSeed.map((row, i) => (
+                        <tr
+                          key={row.sku}
+                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
+                        >
+                          <td className="px-4 py-3 font-semibold text-phos">{row.sku}</td>
+                          <td className="px-4 py-3">{formatCurrency.format(row.amount)}</td>
+                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.clicks)}</td>
+                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.impressions)}</td>
+                          <td className="px-4 py-3">{formatCurrency.format(row.attributedRevenue)}</td>
+                          <td className="px-4 py-3 font-bold text-amber-400">
                             {formatPercent(row.amount / row.attributedRevenue)}
                           </td>
                         </tr>
@@ -1195,47 +908,48 @@ export function DashmarketDashboard() {
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </div>
 
-              <section className="rounded-lg border border-black/10 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Tags aria-hidden className="h-5 w-5 text-clay" />
-                  <h2 className="text-lg font-bold">Promoções ativas</h2>
-                </div>
-                <div className="mt-4 grid gap-3">
+              {/* Promotions */}
+              <div className="border border-rule bg-crt-2 p-5">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">Promocoes ativas</div>
+                <div className="grid gap-0 border border-rule">
                   {promotionRows.map((row) => (
                     <div
-                      className="rounded-lg border border-black/10 bg-paper p-3"
                       key={`${row.sku}-${row.name}`}
+                      className="px-4 py-4 border-b border-rule last:border-b-0"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-bold">{row.name}</p>
-                          <p className="text-sm text-black/60">{row.sku}</p>
+                          <div className="text-[12px] font-semibold text-phos">{row.name}</div>
+                          <div className="text-[11px] text-faint mt-0.5">{row.sku}</div>
                         </div>
-                        <span className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-clay ring-1 ring-amber-100">
+                        <span className="border border-rule px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-amber-400">
                           {row.discount}
                         </span>
                       </div>
-                      <div className="mt-3 flex items-center justify-between text-sm">
-                        <span>{row.period}</span>
-                        <span className="font-semibold text-black/60">{row.impact}</span>
+                      <div className="mt-3 flex items-center justify-between text-[11px]">
+                        <span className="text-muted">{row.period}</span>
+                        <span className="text-faint">{row.impact}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-              </section>
-            </section>
+              </div>
+            </div>
           )}
+        </div>
 
-          <footer className="mt-6 flex flex-col gap-2 pb-4 text-sm text-black/50 sm:flex-row sm:items-center sm:justify-between">
-            <span>Dados demonstrativos enquanto o Supabase e Mercado Livre sao conectados.</span>
-            <span className="inline-flex items-center gap-2">
-              <LineChart aria-hidden className="h-4 w-4" />
-              Preparado para historico e conciliacao por periodo
-            </span>
-          </footer>
-        </section>
+        {/* Bottom status bar */}
+        <footer className="border-t border-rule bg-crt-2 px-6 py-2 flex items-center justify-between text-[10.5px] uppercase tracking-[0.16em] text-faint flex-shrink-0">
+          <span>DM-PRO · v2026.05</span>
+          <span>
+            {supabaseStatus === "demo"
+              ? "Modo demonstrativo · Conecte Supabase e Mercado Livre para dados reais"
+              : `Supabase conectado · ${organization?.name ?? "sem empresa"}`}
+          </span>
+          <span>{filteredMargins.length} SKUs ativos</span>
+        </footer>
       </div>
     </main>
   );
