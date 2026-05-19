@@ -8,6 +8,12 @@ import { WhatIfSimulator } from "@/components/calculator/WhatIfSimulator";
 import { MarginAlerts } from "@/components/calculator/MarginAlerts";
 import { ParetoRanking } from "@/components/calculator/ParetoRanking";
 import { PromotionCalc } from "@/components/calculator/PromotionCalc";
+import { VendasView } from "@/components/vendas/VendasView";
+import { EstoqueFullView } from "@/components/estoque/EstoqueFullView";
+import { PublicidadeView } from "@/components/publicidade/PublicidadeView";
+import { FinanceiroEmpresaView } from "@/components/financeiro/FinanceiroEmpresaView";
+import { FinanceiroPessoalView } from "@/components/financeiro/FinanceiroPessoalView";
+import { type DateRange } from "@/components/ui/DateRangePicker";
 import type { SavedProduct } from "@/lib/calculator/types";
 import {
   calculateContributionMargins,
@@ -21,7 +27,7 @@ import type { MarketplaceProvider } from "@/lib/marketplaces/types";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type ViewKey = "margem" | "custos" | "estoque" | "ads";
+type ViewKey = "margem" | "custos" | "vendas" | "estoque" | "publicidade" | "financeiro" | "fin-pessoal";
 type SupabaseStatus = "checking" | "demo" | "connected" | "error";
 
 type Organization = { id: string; name: string; slug: string };
@@ -129,10 +135,13 @@ const allocationLabel: Record<SkuCost["allocation"], string> = {
 };
 
 const views: Array<{ key: ViewKey; label: string; code: string }> = [
-  { key: "margem", label: "Margem contrib.", code: "MCB" },
-  { key: "custos", label: "Centro de custos", code: "CCT" },
-  { key: "estoque", label: "Estoque Full", code: "EST" },
-  { key: "ads", label: "Publicidade", code: "ADS" }
+  { key: "margem",      label: "Margem contrib.",  code: "MCB" },
+  { key: "custos",      label: "Centro de custos", code: "CCT" },
+  { key: "vendas",      label: "Vendas",            code: "VND" },
+  { key: "estoque",     label: "Estoque Full",      code: "EST" },
+  { key: "publicidade", label: "Publicidade",       code: "PUB" },
+  { key: "financeiro",  label: "Financeiro",        code: "FIN" },
+  { key: "fin-pessoal", label: "Fin. Pessoal",      code: "FPE" },
 ];
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -248,6 +257,11 @@ export function DashmarketDashboard() {
   const [selectedProvider, setSelectedProvider] = useState<MarketplaceProvider>("mercadolivre");
   const [activeView, setActiveView] = useState<ViewKey>("margem");
   const [costSubView, setCostSubView] = useState<"calc" | "sim" | "alerts" | "pareto" | "promo">("calc");
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const to   = new Date();
+    const from = new Date(to); from.setDate(to.getDate() - 29);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  });
   const [skuFilter, setSkuFilter] = useState("");
   const [costs, setCosts] = useState<SkuCost[]>(costsSeed);
   const [savedProducts, setSavedProducts] = useState<SavedProduct[]>([]);
@@ -680,117 +694,29 @@ export function DashmarketDashboard() {
             </div>
           )}
 
-          {/* ── ESTOQUE VIEW ── */}
-          {activeView === "estoque" && (
-            <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-              <div className="border border-rule">
-                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[EST] Estoque por canal</div>
-                  <div className="text-[12px] text-muted mt-0.5">Full e Flex — snapshots do Mercado Livre</div>
-                </div>
-                <div className="table-scroll overflow-x-auto">
-                  <table className="w-full min-w-[680px] text-left text-[12.5px]">
-                    <THead cols={["SKU", "Canal", "Disponivel", "Reservado", "Em transferencia", "Status"]} />
-                    <tbody>
-                      {inventoryRows.map((row, i) => (
-                        <tr
-                          key={row.sku}
-                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
-                        >
-                          <td className="px-4 py-3 font-semibold text-phos">{row.sku}</td>
-                          <td className="px-4 py-3 text-muted">{row.channel}</td>
-                          <td className="px-4 py-3">{formatNumber.format(row.available)}</td>
-                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.reserved)}</td>
-                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.transfer)}</td>
-                          <td className={`px-4 py-3 font-bold text-[11px] uppercase tracking-[0.1em] ${stockColor(row.status)}`}>
-                            {row.status}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Sync queue */}
-              <div className="border border-rule bg-crt-2 p-5">
-                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">Fila de sincronizacao</div>
-                <div className="grid gap-0 border border-rule">
-                  {["orders", "inventory", "listings", "promotions"].map((item, index) => (
-                    <div
-                      key={item}
-                      className="flex items-center justify-between px-4 py-3 border-b border-rule last:border-b-0"
-                    >
-                      <span className="text-[11px] uppercase tracking-[0.1em] text-phos">{item}</span>
-                      <span className="text-[10px] text-faint">
-                        {index === 0 ? "15 min" : "1 h"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+          {/* ── VENDAS ── */}
+          {activeView === "vendas" && (
+            <VendasView dateRange={dateRange} onDateChange={setDateRange} />
           )}
 
-          {/* ── ADS VIEW ── */}
-          {activeView === "ads" && (
-            <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-              <div className="border border-rule">
-                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[ADS] Publicidade por SKU</div>
-                  <div className="text-[12px] text-muted mt-0.5">Investimento e receita atribuida entram no calculo de margem</div>
-                </div>
-                <div className="table-scroll overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-[12.5px]">
-                    <THead cols={["SKU", "Investimento", "Cliques", "Impressoes", "Rec. atribuida", "ACOS"]} />
-                    <tbody>
-                      {adSpendSeed.map((row, i) => (
-                        <tr
-                          key={row.sku}
-                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
-                        >
-                          <td className="px-4 py-3 font-semibold text-phos">{row.sku}</td>
-                          <td className="px-4 py-3">{formatCurrency.format(row.amount)}</td>
-                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.clicks)}</td>
-                          <td className="px-4 py-3 text-muted">{formatNumber.format(row.impressions)}</td>
-                          <td className="px-4 py-3">{formatCurrency.format(row.attributedRevenue)}</td>
-                          <td className="px-4 py-3 font-bold text-amber-400">
-                            {formatPercent(row.amount / row.attributedRevenue)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+          {/* ── ESTOQUE FULL ── */}
+          {activeView === "estoque" && (
+            <EstoqueFullView dateRange={dateRange} onDateChange={setDateRange} />
+          )}
 
-              {/* Promotions */}
-              <div className="border border-rule bg-crt-2 p-5">
-                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">Promocoes ativas</div>
-                <div className="grid gap-0 border border-rule">
-                  {promotionRows.map((row) => (
-                    <div
-                      key={`${row.sku}-${row.name}`}
-                      className="px-4 py-4 border-b border-rule last:border-b-0"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-[12px] font-semibold text-phos">{row.name}</div>
-                          <div className="text-[11px] text-faint mt-0.5">{row.sku}</div>
-                        </div>
-                        <span className="border border-rule px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-amber-400">
-                          {row.discount}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-[11px]">
-                        <span className="text-muted">{row.period}</span>
-                        <span className="text-faint">{row.impact}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+          {/* ── PUBLICIDADE ── */}
+          {activeView === "publicidade" && (
+            <PublicidadeView dateRange={dateRange} onDateChange={setDateRange} />
+          )}
+
+          {/* ── FINANCEIRO EMPRESA ── */}
+          {activeView === "financeiro" && (
+            <FinanceiroEmpresaView dateRange={dateRange} onDateChange={setDateRange} />
+          )}
+
+          {/* ── FINANCEIRO PESSOAL ── */}
+          {activeView === "fin-pessoal" && (
+            <FinanceiroPessoalView dateRange={dateRange} onDateChange={setDateRange} />
           )}
         </div>
 
