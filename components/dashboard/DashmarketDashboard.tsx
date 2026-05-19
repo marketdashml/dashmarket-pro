@@ -268,6 +268,7 @@ export function DashmarketDashboard() {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>("checking");
+  const [userId, setUserId] = useState<string | null>(null);
   const [realProducts, setRealProducts] = useState<ProductRow[]>([]);
   const [dataMessage, setDataMessage] = useState<string | null>(null);
   const [isSavingCost] = useState(false);
@@ -364,6 +365,7 @@ export function DashmarketDashboard() {
           if (!isMounted) return;
           setSupabaseStatus("demo");
           setUserEmail(null);
+          setUserId(null);
           setOrganization(null);
           setRealProducts([]);
           setCosts(costsSeed);
@@ -382,6 +384,7 @@ export function DashmarketDashboard() {
         if (!isMounted) return;
 
         setUserEmail(session.user.email ?? null);
+        setUserId(session.user.id);
         setOrganization(org);
         setSupabaseStatus("connected");
 
@@ -408,6 +411,7 @@ export function DashmarketDashboard() {
     await supabaseClient.auth.signOut();
     setSupabaseStatus("demo");
     setUserEmail(null);
+    setUserId(null);
     setOrganization(null);
     setRealProducts([]);
     setCosts(costsSeed);
@@ -711,12 +715,20 @@ export function DashmarketDashboard() {
 
           {/* ── FINANCEIRO EMPRESA ── */}
           {activeView === "financeiro" && (
-            <FinanceiroEmpresaView dateRange={dateRange} onDateChange={setDateRange} />
+            <FinanceiroEmpresaView
+              dateRange={dateRange}
+              onDateChange={setDateRange}
+              organizationId={organization?.id}
+            />
           )}
 
           {/* ── FINANCEIRO PESSOAL ── */}
           {activeView === "fin-pessoal" && (
-            <FinanceiroPessoalView dateRange={dateRange} onDateChange={setDateRange} />
+            <FinanceiroPessoalView
+              dateRange={dateRange}
+              onDateChange={setDateRange}
+              userId={userId}
+            />
           )}
         </div>
 

@@ -1,8 +1,15 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+import {
+  fetchFinancialEntries,
+  insertFinancialEntry,
+  deleteFinancialEntry,
+  type FinancialEntry,
+} from "@/lib/supabase/financial";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EntryType = "receita" | "despesa";
@@ -52,10 +59,34 @@ const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 interface Props {
   dateRange: DateRange;
   onDateChange: (r: DateRange) => void;
+  organizationId?: string | null;
+  userId?: string | null;
 }
 
-export function FinanceiroEmpresaView({ dateRange, onDateChange }: Props) {
-  const [entries, setEntries] = useState<FinEntry[]>(SEED);
+export function FinanceiroEmpresaView({ dateRange, onDateChange, organizationId }: Props) {
+  const isConnected = Boolean(organizationId);
+  const [entries, setEntries] = useState<FinEntry[]>(isConnected ? [] : SEED);
+  const [loading, setLoading] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  // Load from Supabase when connected
+  const loadEntries = useCallback(async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    try {
+      const data = await fetchFinancialEntries(organizationId, dateRange.from, dateRange.to);
+      setEntries(data.map(e => ({
+        id: e.id, date: e.date, type: e.type as EntryType,
+        category: e.category as Category, description: e.description, amount: e.amount,
+      })));
+    } catch (err) {
+      setSyncMsg(err instanceof Error ? err.message : "Erro ao carregar lançamentos.");
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId, dateRange.from, dateRange.to]);
+
+  useEffect(() => { if (organizationId) { loadEntries(); } }, [loadEntries, organizationId]);
+
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     type: "receita" as EntryType,
@@ -84,18 +115,30 @@ export function FinanceiroEmpresaView({ dateRange, onDateChange }: Props) {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [filtered]);
 
-  function handleAdd(ev: FormEvent) {
+  async function handleAdd(ev: FormEvent) {
     ev.preventDefault();
     if (!form.description.trim() || !form.amount) return;
-    setEntries(prev => [...prev, {
-      id: crypto.randomUUID(),
-      date: form.date,
-      type: form.type,
-      category: form.category,
-      description: form.description.trim(),
-      amount: Number(form.amount),
-    }]);
+    const newEntry: FinEntry = {
+      id: crypto.randomUUID(), date: form.date, type: form.type,
+      category: form.category, description: form.description.trim(), amount: Number(form.amount),
+    };
+    if (organizationId) {
+      try {
+        const saved = await insertFinancialEntry({ ...newEntry, organization_id: organizationId });
+        setEntries(prev => [{ id: saved.id, date: saved.date, type: saved.type as EntryType, category: saved.category as Category, description: saved.description, amount: saved.amount }, ...prev]);
+        setSyncMsg("Salvo no Supabase.");
+      } catch (err) { setSyncMsg(err instanceof Error ? err.message : "Erro ao salvar."); }
+    } else {
+      setEntries(prev => [...prev, newEntry]);
+    }
     setForm(f => ({ ...f, description: "", amount: "" }));
+  }
+
+  async function handleDelete(id: string) {
+    if (organizationId) {
+      try { await deleteFinancialEntry(id); } catch { /* ignore */ }
+    }
+    setEntries(prev => prev.filter(e => e.id !== id));
   }
 
   const inputCls = "h-8 bg-crt border border-rule px-3 text-phos text-[12px] normal-case tracking-normal outline-none focus:border-hazard transition-colors";
@@ -104,7 +147,12 @@ export function FinanceiroEmpresaView({ dateRange, onDateChange }: Props) {
     <div className="grid gap-5">
       {/* Header */}
       <div className="border border-rule bg-crt-2 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-        <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[FIN] Financeiro da Empresa</div>
+        <div className="text-[10px] uppercase tracking-[0.22em] text-hazard flex items-center gap-3">
+          [FIN] Financeiro da Empresa
+          {isConnected && <span className="text-signal">⬤ Supabase</span>}
+          {loading && <span className="text-faint animate-blink">Carregando...</span>}
+          {syncMsg && <span className="text-faint normal-case tracking-normal">{syncMsg}</span>}
+        </div>
         <DateRangePicker value={dateRange} onChange={onDateChange} />
       </div>
 
@@ -200,7 +248,7 @@ export function FinanceiroEmpresaView({ dateRange, onDateChange }: Props) {
                         {e.type === "receita" ? "+" : "−"} {fmt(e.amount)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <button onClick={() => setEntries(prev => prev.filter(x => x.id !== e.id))} className="text-faint hover:text-hazard transition-colors">
+                        <button onClick={() => handleDelete(e.id)} className="text-faint hover:text-hazard transition-colors">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>

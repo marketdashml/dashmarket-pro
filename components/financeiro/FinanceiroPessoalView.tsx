@@ -1,8 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+import {
+  fetchPersonalEntries, insertPersonalEntry, deletePersonalEntry,
+  fetchLoans, insertLoan, updateLoanStatus, deleteLoan as deleteLoanDb,
+  type LoanStatus as DbLoanStatus,
+} from "@/lib/supabase/financial";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type PessoalType = "receita" | "despesa";
@@ -80,11 +85,35 @@ const STATUS_COLOR: Record<LoanStatus, string> = {
 interface Props {
   dateRange: DateRange;
   onDateChange: (r: DateRange) => void;
+  userId?: string | null;
 }
 
-export function FinanceiroPessoalView({ dateRange, onDateChange }: Props) {
-  const [entries, setEntries] = useState<PessoalEntry[]>(PESSOAL_SEED);
-  const [loans, setLoans] = useState<Loan[]>(LOANS_SEED);
+export function FinanceiroPessoalView({ dateRange, onDateChange, userId }: Props) {
+  const isConnected = Boolean(userId);
+  const [entries, setEntries] = useState<PessoalEntry[]>(isConnected ? [] : PESSOAL_SEED);
+  const [loans, setLoans] = useState<Loan[]>(isConnected ? [] : LOANS_SEED);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Load data from Supabase when connected
+  const loadData = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const [entriesData, loansData] = await Promise.all([
+        fetchPersonalEntries(userId, dateRange.from, dateRange.to),
+        fetchLoans(userId),
+      ]);
+      setEntries(entriesData.map(e => ({ id: e.id, date: e.date, type: e.type as PessoalType, category: e.category as PessoalCat, description: e.description, amount: e.amount })));
+      setLoans(loansData.map(l => ({ id: l.id, type: l.type as LoanType, counterpart: l.counterpart, description: l.description ?? "", principal: l.principal, interestPct: l.interest_pct, startDate: l.start_date, dueDate: l.due_date, amountPaid: l.amount_paid, status: l.status as LoanStatus })));
+    } catch (err) {
+      setSyncMsg(err instanceof Error ? err.message : "Erro ao carregar dados.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, dateRange.from, dateRange.to]);
+
+  useEffect(() => { if (userId) { loadData(); } }, [loadData, userId]);
   const [activeSection, setActiveSection] = useState<"orcamento" | "emprestimos">("orcamento");
   const [loanForm, setLoanForm] = useState({
     type: "cedido" as LoanType,
@@ -125,29 +154,69 @@ export function FinanceiroPessoalView({ dateRange, onDateChange }: Props) {
 
   const inputCls = "h-8 bg-crt border border-rule px-3 text-phos text-[12px] normal-case tracking-normal outline-none focus:border-hazard transition-colors";
 
-  function addEntry(ev: FormEvent) {
+  async function addEntry(ev: FormEvent) {
     ev.preventDefault();
     if (!entryForm.description.trim() || !entryForm.amount) return;
-    setEntries(prev => [...prev, { id: crypto.randomUUID(), date: entryForm.date, type: entryForm.type, category: entryForm.category, description: entryForm.description.trim(), amount: Number(entryForm.amount) }]);
+    const newE: PessoalEntry = { id: crypto.randomUUID(), date: entryForm.date, type: entryForm.type, category: entryForm.category, description: entryForm.description.trim(), amount: Number(entryForm.amount) };
+    if (userId) {
+      try {
+        const saved = await insertPersonalEntry({ user_id: userId, date: newE.date, type: newE.type, category: newE.category, description: newE.description, amount: newE.amount });
+        setEntries(prev => [{ id: saved.id, date: saved.date, type: saved.type as PessoalType, category: saved.category as PessoalCat, description: saved.description, amount: saved.amount }, ...prev]);
+        setSyncMsg("Salvo no Supabase.");
+      } catch (err) { setSyncMsg(err instanceof Error ? err.message : "Erro."); return; }
+    } else {
+      setEntries(prev => [...prev, newE]);
+    }
     setEntryForm(f => ({ ...f, description: "", amount: "" }));
   }
 
-  function addLoan(ev: FormEvent) {
+  async function removeEntry(id: string) {
+    if (userId) { try { await deletePersonalEntry(id); } catch { /* ignore */ } }
+    setEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  async function addLoan(ev: FormEvent) {
     ev.preventDefault();
     if (!loanForm.counterpart.trim() || !loanForm.principal || !loanForm.dueDate) return;
-    setLoans(prev => [...prev, { id: crypto.randomUUID(), type: loanForm.type, counterpart: loanForm.counterpart.trim(), description: loanForm.description.trim(), principal: Number(loanForm.principal), interestPct: Number(loanForm.interestPct), startDate: loanForm.startDate, dueDate: loanForm.dueDate, amountPaid: 0, status: "ativo" }]);
+    const newL: Loan = { id: crypto.randomUUID(), type: loanForm.type, counterpart: loanForm.counterpart.trim(), description: loanForm.description.trim(), principal: Number(loanForm.principal), interestPct: Number(loanForm.interestPct), startDate: loanForm.startDate, dueDate: loanForm.dueDate, amountPaid: 0, status: "ativo" };
+    if (userId) {
+      try {
+        const saved = await insertLoan({ user_id: userId, type: newL.type, counterpart: newL.counterpart, description: newL.description, principal: newL.principal, interest_pct: newL.interestPct, start_date: newL.startDate, due_date: newL.dueDate, amount_paid: 0, status: "ativo" });
+        setLoans(prev => [...prev, { id: saved.id, type: saved.type as LoanType, counterpart: saved.counterpart, description: saved.description ?? "", principal: saved.principal, interestPct: saved.interest_pct, startDate: saved.start_date, dueDate: saved.due_date, amountPaid: saved.amount_paid, status: saved.status as LoanStatus }]);
+        setSyncMsg("Empréstimo salvo.");
+      } catch (err) { setSyncMsg(err instanceof Error ? err.message : "Erro."); return; }
+    } else {
+      setLoans(prev => [...prev, newL]);
+    }
     setLoanForm(f => ({ ...f, counterpart: "", description: "", principal: "", dueDate: "" }));
   }
 
-  function toggleLoanStatus(id: string) {
-    setLoans(prev => prev.map(l => l.id !== id ? l : { ...l, status: l.status === "quitado" ? "ativo" : "quitado", amountPaid: l.status === "quitado" ? 0 : l.principal }));
+  async function removeLoan(id: string) {
+    if (userId) { try { await deleteLoanDb(id); } catch { /* ignore */ } }
+    setLoans(prev => prev.filter(l => l.id !== id));
+  }
+
+  async function toggleLoanStatus(id: string) {
+    const loan = loans.find(l => l.id === id);
+    if (!loan) return;
+    const newStatus: LoanStatus = loan.status === "quitado" ? "ativo" : "quitado";
+    const newPaid = newStatus === "quitado" ? loan.principal : 0;
+    if (userId) {
+      try { await updateLoanStatus(id, newStatus as DbLoanStatus, newPaid); } catch { /* ignore */ }
+    }
+    setLoans(prev => prev.map(l => l.id !== id ? l : { ...l, status: newStatus, amountPaid: newPaid }));
   }
 
   return (
     <div className="grid gap-5">
       {/* Header */}
       <div className="border border-rule bg-crt-2 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-        <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[FPE] Financeiro Pessoal</div>
+        <div className="text-[10px] uppercase tracking-[0.22em] text-hazard flex items-center gap-3">
+          [FPE] Financeiro Pessoal
+          {isConnected && <span className="text-signal">⬤ Supabase</span>}
+          {loading && <span className="text-faint animate-blink">Carregando...</span>}
+          {syncMsg && <span className="text-faint normal-case tracking-normal">{syncMsg}</span>}
+        </div>
         <DateRangePicker value={dateRange} onChange={onDateChange} />
       </div>
 
@@ -246,7 +315,7 @@ export function FinanceiroPessoalView({ dateRange, onDateChange }: Props) {
                         {e.type === "receita" ? "+" : "−"} {fmt(e.amount)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <button onClick={() => setEntries(prev => prev.filter(x => x.id !== e.id))} className="text-faint hover:text-hazard transition-colors">
+                        <button onClick={() => removeEntry(e.id)} className="text-faint hover:text-hazard transition-colors">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>
@@ -388,7 +457,7 @@ export function FinanceiroPessoalView({ dateRange, onDateChange }: Props) {
                             <button onClick={() => toggleLoanStatus(l.id)} className="text-faint hover:text-signal transition-colors text-[10px] uppercase tracking-[0.1em]">
                               {l.status === "quitado" ? "Reabrir" : "Quitar"}
                             </button>
-                            <button onClick={() => setLoans(prev => prev.filter(x => x.id !== l.id))} className="text-faint hover:text-hazard transition-colors">
+                            <button onClick={() => removeLoan(l.id)} className="text-faint hover:text-hazard transition-colors">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </td>
