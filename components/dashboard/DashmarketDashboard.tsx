@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { LogOut, PackagePlus, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { LogOut, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { CostCalculatorForm } from "@/components/calculator/CostCalculatorForm";
+import { WhatIfSimulator } from "@/components/calculator/WhatIfSimulator";
+import { MarginAlerts } from "@/components/calculator/MarginAlerts";
+import { ParetoRanking } from "@/components/calculator/ParetoRanking";
+import { PromotionCalc } from "@/components/calculator/PromotionCalc";
+import type { SavedProduct } from "@/lib/calculator/types";
 import {
   calculateContributionMargins,
   type AdvertisingSpend,
@@ -241,15 +247,17 @@ export function DashmarketDashboard() {
 
   const [selectedProvider, setSelectedProvider] = useState<MarketplaceProvider>("mercadolivre");
   const [activeView, setActiveView] = useState<ViewKey>("margem");
+  const [costSubView, setCostSubView] = useState<"calc" | "sim" | "alerts" | "pareto" | "promo">("calc");
   const [skuFilter, setSkuFilter] = useState("");
   const [costs, setCosts] = useState<SkuCost[]>(costsSeed);
+  const [savedProducts, setSavedProducts] = useState<SavedProduct[]>([]);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>("checking");
   const [realProducts, setRealProducts] = useState<ProductRow[]>([]);
   const [dataMessage, setDataMessage] = useState<string | null>(null);
-  const [isSavingCost, setIsSavingCost] = useState(false);
-  const [costForm, setCostForm] = useState({
+  const [isSavingCost] = useState(false);
+  const [costForm] = useState({
     sku: salesSeed[0].sku,
     label: "",
     category: "product" as SkuCost["category"],
@@ -380,64 +388,6 @@ export function DashmarketDashboard() {
     loadWorkspace();
     return () => { isMounted = false; };
   }, [loadCostCenter, supabaseClient]);
-
-  async function addCost(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!costForm.label.trim() || !costForm.amount) return;
-
-    if (supabaseClient && organization) {
-      setIsSavingCost(true);
-      setDataMessage(null);
-      try {
-        let product = realProducts.find((p) => p.internal_sku === costForm.sku);
-
-        if (!product) {
-          const seedProduct = salesSeed.find((s) => s.sku === costForm.sku);
-          const { data: insertedProduct, error: productError } = await supabaseClient
-            .from("products")
-            .insert({ organization_id: organization.id, internal_sku: costForm.sku, title: seedProduct?.title ?? costForm.sku })
-            .select("id, internal_sku, title")
-            .single();
-          if (productError) throw productError;
-          product = insertedProduct as ProductRow;
-        }
-
-        const { error: costError } = await supabaseClient.from("sku_costs").insert({
-          organization_id: organization.id,
-          product_id: product.id,
-          cost_name: costForm.label.trim(),
-          cost_category: costForm.category,
-          allocation_method: costForm.allocation,
-          amount: Number(costForm.amount),
-          valid_from: costForm.validFrom
-        });
-
-        if (costError) throw costError;
-        await loadCostCenter(organization.id);
-        setCostForm((c) => ({ ...c, label: "", amount: "" }));
-        setDataMessage("Custo salvo no Supabase.");
-      } catch (error) {
-        setDataMessage(error instanceof Error ? error.message : "Nao foi possivel salvar.");
-      } finally {
-        setIsSavingCost(false);
-      }
-      return;
-    }
-
-    setCosts((current) => [
-      ...current,
-      {
-        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `cost-${Date.now()}`,
-        sku: costForm.sku,
-        label: costForm.label.trim(),
-        category: costForm.category,
-        amount: Number(costForm.amount),
-        allocation: costForm.allocation,
-        validFrom: costForm.validFrom
-      }
-    ]);
-    setCostForm((c) => ({ ...c, label: "", amount: "" }));
-  }
 
   async function signOut() {
     if (!supabaseClient) return;
@@ -688,141 +638,45 @@ export function DashmarketDashboard() {
 
           {/* ── CUSTOS VIEW ── */}
           {activeView === "custos" && (
-            <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-              {/* Form */}
-              <form
-                className="border border-rule bg-crt-2 p-5"
-                onSubmit={addCost}
-              >
-                <div className="text-[10px] uppercase tracking-[0.22em] text-hazard mb-4">
-                  [CCT] Cadastrar custo de SKU
-                </div>
-
-                <div className="grid gap-3">
-                  <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                    SKU
-                    <select
-                      className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                      value={costForm.sku}
-                      onChange={(e) => setCostForm((c) => ({ ...c, sku: e.target.value }))}
+            <div className="grid gap-0">
+              {/* Sub-navigation */}
+              <div className="border border-rule bg-crt-2 mb-5">
+                <div className="flex">
+                  {([
+                    ["calc",   "Calculadora"],
+                    ["sim",    "Simulador"],
+                    ["alerts", "Alertas"],
+                    ["pareto", "Pareto"],
+                    ["promo",  "Promoção"]
+                  ] as [typeof costSubView, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setCostSubView(key)}
+                      className={`h-8 px-4 text-[10.5px] uppercase tracking-[0.16em] border-r border-rule last:border-r-0 transition-colors ${
+                        costSubView === key
+                          ? "bg-phos text-crt font-semibold"
+                          : "text-faint hover:text-muted"
+                      }`}
                     >
-                      {productOptions.map((p) => (
-                        <option key={p.sku} value={p.sku}>{p.sku}</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] text-faint normal-case tracking-normal">
-                      {supabaseStatus === "connected"
-                        ? "SKU nao encontrado sera criado automaticamente."
-                        : "Entre para salvar no banco."}
-                    </span>
-                  </label>
-
-                  <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                    Nome do custo
-                    <input
-                      className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                      placeholder="Fornecedor, embalagem, imposto..."
-                      value={costForm.label}
-                      onChange={(e) => setCostForm((c) => ({ ...c, label: e.target.value }))}
-                    />
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                      Categoria
-                      <select
-                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                        value={costForm.category}
-                        onChange={(e) => setCostForm((c) => ({ ...c, category: e.target.value as SkuCost["category"] }))}
-                      >
-                        {Object.entries(costCategoryLabel).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                      Alocacao
-                      <select
-                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                        value={costForm.allocation}
-                        onChange={(e) => setCostForm((c) => ({ ...c, allocation: e.target.value as SkuCost["allocation"] }))}
-                      >
-                        {Object.entries(allocationLabel).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                      Valor
-                      <input
-                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0,00"
-                        value={costForm.amount}
-                        onChange={(e) => setCostForm((c) => ({ ...c, amount: e.target.value }))}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                      Vigencia
-                      <input
-                        className="h-9 bg-crt border border-rule px-3 text-phos text-[12px] outline-none focus:border-hazard transition-colors normal-case tracking-normal"
-                        type="date"
-                        value={costForm.validFrom}
-                        onChange={(e) => setCostForm((c) => ({ ...c, validFrom: e.target.value }))}
-                      />
-                    </label>
-                  </div>
-
-                  <button
-                    className="mt-1 h-10 flex items-center justify-center gap-2 bg-phos text-crt text-[11px] uppercase tracking-[0.18em] font-semibold hover:bg-phos/90 transition-colors disabled:opacity-50"
-                    type="submit"
-                    disabled={isSavingCost}
-                  >
-                    <PackagePlus className="h-3.5 w-3.5" />
-                    {isSavingCost ? "Salvando..." : "Adicionar custo"}
-                  </button>
-                </div>
-              </form>
-
-              {/* Cost table */}
-              <div className="border border-rule">
-                <div className="bg-crt-2 px-4 py-3 border-b border-rule">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-hazard">[CCT] Custos ativos</div>
-                  <div className="text-[12px] text-muted mt-0.5">
-                    Cada lancamento entra no calculo de margem respeitando SKU e vigencia
-                  </div>
-                </div>
-                <div className="table-scroll overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-left text-[12.5px]">
-                    <THead cols={["SKU", "Custo", "Categoria", "Alocacao", "Valor", "Vigencia"]} />
-                    <tbody>
-                      {costs.map((cost, i) => (
-                        <tr
-                          key={cost.id}
-                          className={`border-t border-rule hover:bg-rule/30 transition-colors ${i % 2 === 1 ? "bg-crt-2/40" : "bg-crt"}`}
-                        >
-                          <td className="px-4 py-3 font-semibold text-phos">{cost.sku}</td>
-                          <td className="px-4 py-3">{cost.label}</td>
-                          <td className="px-4 py-3 text-muted">{costCategoryLabel[cost.category]}</td>
-                          <td className="px-4 py-3 text-muted">{allocationLabel[cost.allocation]}</td>
-                          <td className="px-4 py-3 font-semibold">
-                            {cost.allocation === "percentage"
-                              ? `${cost.amount}%`
-                              : formatCurrency.format(cost.amount)}
-                          </td>
-                          <td className="px-4 py-3 text-muted">{cost.validFrom}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {costSubView === "calc" && (
+                <CostCalculatorForm
+                  savedProducts={savedProducts}
+                  onSave={(p) => setSavedProducts(prev => [...prev, p])}
+                  onDelete={(id) => setSavedProducts(prev => prev.filter(p => p.id !== id))}
+                  organizationId={organization?.id ?? null}
+                />
+              )}
+              {costSubView === "sim"    && <WhatIfSimulator products={savedProducts} />}
+              {costSubView === "alerts" && <MarginAlerts products={savedProducts} />}
+              {costSubView === "pareto" && <ParetoRanking products={savedProducts} />}
+              {costSubView === "promo"  && <PromotionCalc products={savedProducts} />}
             </div>
           )}
 
